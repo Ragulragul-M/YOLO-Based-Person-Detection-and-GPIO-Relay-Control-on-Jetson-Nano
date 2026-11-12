@@ -1,0 +1,11 @@
+path: ./dataset
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 1
+names: [person]
+
+# Dataset attribution from the original local data.yaml:
+# Roboflow Universe, Object Detection Project, version 4, CC BY 4.0.
+# See the dataset page linked in README.md before redistributing dataset files.

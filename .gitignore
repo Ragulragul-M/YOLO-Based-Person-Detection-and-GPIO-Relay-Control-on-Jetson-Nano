@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+yolo_env/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Training data, model weights, and generated results
+dataset/train/
+dataset/valid/
+dataset/test/
+dataset/**/*.cache
+weights/*.pt
+runs/
+*.mp4
+*.avi
+*.mov
+
+# Editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
