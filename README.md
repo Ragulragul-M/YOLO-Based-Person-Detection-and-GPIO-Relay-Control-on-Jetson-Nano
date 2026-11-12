@@ -1,20 +1,70 @@
-# Ashok Leyland Person Detection Demo
+# YOLO Person Detection and Relay Activation
 
-YOLO-based person detection for recorded video and an RTSP camera feed, with an optional Jetson Nano relay-control script.
+**Project:** Ashok Leyland person-detection and Jetson relay prototype
 
-## What is included
+This project uses a YOLO model to detect people in recorded video or a 360° RTSP camera feed. The Jetson Nano relay script processes the live camera feed and switches a GPIO relay when a qualifying person detection is present.
 
-- `video.py` — detects people in a video file and can save an annotated copy.
-- `live.py` — runs detection on a live RTSP camera stream and displays the annotated feed.
-- `relay.py` — terminal-only live detection that switches a relay when a person is detected. This requires Jetson GPIO hardware.
-- `data.yaml` — dataset layout for the one-class `person` detector used in the training setup.
-- `CHANGELOG.md` — project features and the repository-preparation updates.
+```text
+Video file  → video.py → YOLO → annotated MP4
+360° RTSP   → live.py  → YOLO → live view
+360° RTSP   → relay.py → YOLO → Jetson Nano GPIO pin 18 relay
+```
 
-The dataset, Python environment, camera recordings, and model weights are not included. Put your trained model at `weights/best.pt`; the repository ignores model files and generated recordings by default.
+## Project files
+
+- **`video.py`** — runs person detection on a recorded video, displays annotated frames, and saves an annotated MP4 by default.
+- **`live.py`** — runs person detection on an RTSP camera feed and displays the annotated live view.
+- **`relay.py`** — runs live RTSP person detection in the terminal and controls a Jetson GPIO relay; it uses BCM pin 18.
+- **`data.yaml`** — describes the one-class person dataset layout used for training.
+
+The inference scripts use person class ID `0`. The recorded-video and live-view scripts use image size 640, confidence 0.30, and IoU 0.40 by default. Relay mode uses the separate settings below.
+
+## Recorded training configuration
+
+The project training record describes a YOLOv8n run with the following setup:
+
+| Setting | Recorded value |
+| --- | --- |
+| Training images | 4,108 |
+| Validation images | 388 |
+| Classes | 1 (`person`) |
+| Epochs | 100 |
+| Training image size | 640 × 640 |
+| Batch size | 8 |
+| Training device | NVIDIA RTX 3050 laptop GPU |
+
+Example command for the recorded training settings:
+
+```powershell
+yolo detect train `
+  data=data.yaml `
+  model=yolov8n.pt `
+  epochs=100 `
+  imgsz=640 `
+  batch=8 `
+  device=0
+```
+
+No final accuracy score or validation on unseen footage is documented, so no such result is claimed here.
+
+## Relay settings
+
+The final relay configuration in `relay.py`:
+
+- Reads an RTSP feed and processes every ninth frame.
+- Resizes each processed frame to 350 × 350 before inference.
+- Uses YOLO image size 224 and confidence threshold 0.45.
+- Considers class ID `0` (`person`) and applies box filters: area at least 2,800 pixels and no more than 80% of the frame; height at least half the width; and width and height at least 25 pixels.
+- Sets BCM pin 18 LOW at startup, HIGH when a qualifying person is detected, and LOW when no qualifying detection is present.
+- Prints detection and relay status changes to the terminal.
+
+The relay output level and wiring must match the relay module and Jetson hardware.
 
 ## Setup
 
-Create and activate a Python virtual environment, then install the packages:
+Use a Python and PyTorch installation compatible with the computer or Jetson software image. The general dependencies listed in `requirements.txt` are OpenCV, PyTorch, and Ultralytics. On Jetson Nano, use the PyTorch/OpenCV packages compatible with the installed JetPack image; `requirements-jetson.txt` notes that `Jetson.GPIO` must be installed separately using a compatible Jetson package or build.
+
+For a Windows development environment, create a virtual environment and install the general dependencies:
 
 ```powershell
 python -m venv .venv
@@ -22,59 +72,48 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Install a PyTorch build that matches your computer or Jetson software image. Jetson installations often need the device-specific PyTorch package. For relay control, install the GPIO package supported by your Jetson image as described below.
+Put your trained YOLO weights at `weights/best.pt` for the default `video.py` and `live.py` setup. Set `MODEL_PATH` or pass `--model` to use a different weights file. For Jetson relay operation, set `MODEL_PATH` to the model file on the Jetson. The dataset, trained weights, camera recordings, and generated output videos are not included in this repository.
 
-Copy your trained YOLO model to `weights/best.pt`. This file is intentionally excluded from Git. `video.py` and `live.py` use that path by default; `relay.py` defaults to `/home/foundry/best.pt` to match the Jetson setup and can be changed with `MODEL_PATH`.
+## Run the project
 
-## Run detection on a video
+### Test a recorded video
 
 ```powershell
 python video.py --video "path\to\input.mp4"
 ```
 
-By default, the script displays detections and writes `output.mp4`. To choose a different model or output path:
+By default, `video.py` displays the annotated video and writes `output.mp4`. Press **Esc** to close the display. Use `--model` or `MODEL_PATH` to select another model file, and `--output` to change the output video name.
 
-```powershell
-python video.py --video "path\to\input.mp4" --model "weights\best.pt" --output "output.mp4"
-```
+### View a live RTSP camera feed
 
-## Run with an RTSP camera
-
-Set the camera stream address in your terminal. Keep credentials out of source files and commits.
+Set `CAMERA_URL` and, when needed, `MODEL_PATH` in PowerShell, keeping the camera address and credentials private:
 
 ```powershell
 $env:CAMERA_URL = "rtsp://<user>:<password>@<camera-host>:554/<stream-path>"
+$env:MODEL_PATH = "weights\best.pt"
 python live.py
 ```
 
-For Jetson relay control, set `CAMERA_URL` and, if needed, `MODEL_PATH`, then run:
+Alternatively, pass the stream address with `--source`. `live.py` reads `MODEL_PATH` or defaults to `weights/best.pt`; you can also pass `--model`.
+
+### Run relay control on Jetson Nano
+
+Install the Jetson-compatible GPIO package and set both environment variables to your camera stream and model file:
 
 ```bash
 export CAMERA_URL='rtsp://<user>:<password>@<camera-host>:554/<stream-path>'
-export MODEL_PATH='/home/foundry/best.pt'
+export MODEL_PATH='/path/to/best.pt'
 python3 relay.py
 ```
 
-On the Jetson, install `Jetson.GPIO` using the package or instructions compatible with its JetPack image. Confirm the relay board's active-high/active-low behavior and wiring before connecting it to equipment. The script defaults to BCM pin 18; set `RELAY_PIN` if your setup uses another pin.
+`relay.py` requires `CAMERA_URL`, reads `MODEL_PATH` when set, and uses the BCM numbering scheme for GPIO pin 18.
 
-## Train the detector
+## Dataset and attribution
 
-Download or place the appropriately licensed dataset in `dataset/` using the layout described by `data.yaml`, then run from the repository root:
+The original `data.yaml` identifies [Roboflow Universe Object Detection Project, version 4](https://universe.roboflow.com/ml-project-oihij/object-detection-project-ki1qs/dataset/4) and records the dataset license as **CC BY 4.0**. Dataset files are not included. Retain the required attribution and follow the license terms if redistributing dataset images or derived materials.
 
-```powershell
-yolo detect train data=data.yaml model=yolov8n.pt epochs=100 imgsz=640 batch=8 device=0 project=runs
-```
+## Limitations and safety
 
-The previous training log showed a one-class person dataset and this training configuration. No final accuracy or validation score is claimed here. Add the resulting model to `weights/best.pt` locally to run inference.
+This relay prototype is **not safety-certified** and must not be used as the sole protection for people or equipment. This project description does not claim thermal sensing, completed PLC integration, measured accuracy, or verified performance on unseen footage.
 
-## Data and attribution
-
-The saved dataset configuration identifies the [Roboflow Universe object detection dataset, version 4](https://universe.roboflow.com/ml-project-oihij/object-detection-project-ki1qs/dataset/4) under the CC BY 4.0 license. The image files are not included here. If you redistribute dataset images or derived material, follow the dataset license and retain the required attribution. Review the dataset page and its current terms before publishing it.
-
-## Security and privacy
-
-Camera addresses and credentials are read from `CAMERA_URL` rather than stored in these scripts. Do not commit `.env` files, passwords, private camera footage, dataset exports, or other credentials. If a real camera password was used in an earlier version, change it before sharing the project.
-
-## License
-
-No license has been added yet. Add one only after confirming that you have the rights to license the code and any material you distribute with it.
+Keep camera URLs, credentials, private recordings, dataset exports, and model weights out of public commits.
