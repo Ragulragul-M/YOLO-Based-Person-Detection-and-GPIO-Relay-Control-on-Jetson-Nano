@@ -110,7 +110,7 @@ python3 relay.py
 
 ## Dataset and attribution
 
-**Custom project dataset:** The training images were extracted from the project's own 360° camera footage and labeled for the `person` class. The dataset was organized and exported in YOLO format with Roboflow. The original `data.yaml` identifies [Roboflow Universe Object Detection Project, version 4](https://universe.roboflow.com/ml-project-oihij/object-detection-project-ki1qs/dataset/4) and records its license as **CC BY 4.0**. Dataset files are not included. Retain the required attribution and follow the license terms if redistributing dataset images or derived materials.
+**Custom project dataset:** The images were captured from our own 360° camera footage and annotated using Roboflow for the `person` class. The dataset was exported in YOLO format. Dataset files are not included in this repository.
 
 ## Limitations and safety
 
